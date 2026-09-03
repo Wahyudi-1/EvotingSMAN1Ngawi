@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -12,11 +12,13 @@ import {
   doc, 
   getDoc, 
   setDoc, 
-  addDoc 
+  addDoc,
+  getDocs 
 } from 'firebase/firestore';
-import { Maximize, AlertCircle, CheckCircle2, User, KeyRound, LogOut } from 'lucide-react';
+import { Maximize, AlertCircle, CheckCircle2, User, KeyRound, LogOut, BarChart3, RefreshCw, ArrowLeft } from 'lucide-react';
 
-// --- KONFIGURASI FIREBASE (Wajib untuk Canvas Environment) ---
+// --- KONFIGURASI FIREBASE ---
+// Ganti nilai di bawah ini dengan konfigurasi Firebase milik sekolah Anda jika sudah siap.
 const defaultFirebaseConfig = {
   apiKey: "AIzaSyCzeg9t7CjeoxNB9DaNK10NsHixk0LC9UA",
   authDomain: "e-voting-6f923.firebaseapp.com",
@@ -41,12 +43,12 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'osis-sman1ngawi-app';
 
-// --- DATA DUMMY PEMILIH (Di dunia nyata, ini diambil dari server/excel) ---
-// Format: ID (NISN/NIP), Nama, Peran
+// --- DATA PEMILIH SAH ---
+// Di tahap produksi, data ini bisa Anda impor dari file JSON terpisah.
 const DATA_PEMILIH_SAH = [
   { id: "1234567890", name: "BUDI SANTOSO", role: "Siswa" },
   { id: "0987654321", name: "SITI AMINAH", role: "Siswa" },
-  { id: "198001012005011001", name: "PAK GURU, S.Pd", role: "Guru" },
+  { id: "198001012005011001", name: "PAK GURU, S.PD", role: "Guru" },
   { id: "1122334455", name: "ANDI SETIAWAN", role: "Siswa" }
 ];
 
@@ -56,55 +58,53 @@ const KANDIDAT = [
     id: 1,
     nama: "Raden Mas & Ayu Larasati",
     visi: "Mewujudkan OSIS yang Inovatif dan Berkarakter",
-    img: "https://images.unsplash.com/photo-1529390079861-591de354faf5?auto=format&fit=crop&q=80&w=400&h=500" // Placeholder
+    img: "https://images.unsplash.com/photo-1529390079861-591de354faf5?auto=format&fit=crop&q=80&w=400&h=500"
   },
   {
     id: 2,
     nama: "Bagas Putra & Citra Kirana",
     visi: "Sekolah Sehat, Siswa Berprestasi",
-    img: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=400&h=500" // Placeholder
+    img: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=400&h=500"
   },
   {
     id: 3,
     nama: "Dimas Anggara & Eka Putri",
     visi: "Sinergi, Kolaborasi, dan Aksi Nyata",
-    img: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=400&h=500" // Placeholder
+    img: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=400&h=500"
   }
 ];
 
 export default function App() {
-  // State Autentikasi Firebase
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [isDbReady, setIsDbReady] = useState(false);
 
-  // State Aplikasi
-  const [appState, setAppState] = useState('login'); // 'login' | 'voting' | 'success'
+  // Status Halaman: 'login' | 'voting' | 'success' | 'admin'
+  const [appState, setAppState] = useState('login'); 
   const [currentVoter, setCurrentVoter] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // State Form Login
+  // Form Input
   const [inputName, setInputName] = useState('');
   const [inputId, setInputId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // State Modal (Pengganti Alert)
+  // Data Rekapitulasi (Admin)
+  const [rekapData, setRekapData] = useState({ totalSuara: 0, perKandidat: {} });
+  const [isLoadingRekap, setIsLoadingRekap] = useState(false);
+
+  // State Modal (Pengganti Alert agar aman di semua perangkat)
   const [modal, setModal] = useState({ isOpen: false, type: '', title: '', message: '', onConfirm: null });
 
-  // Inisialisasi Firebase Auth
   useEffect(() => {
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           try {
-            // Coba login menggunakan token keamanan sistem
             await signInWithCustomToken(auth, __initial_auth_token);
           } catch (tokenError) {
-            console.warn("Token tidak cocok, mengalihkan ke login anonim:", tokenError.message);
-            // FALLBACK: Jika token gagal/mismatch, gunakan login anonim
             await signInAnonymously(auth);
           }
         } else {
-          // Jika token sistem tidak ada, gunakan login anonim
           await signInAnonymously(auth);
         }
       } catch (error) {
@@ -121,7 +121,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Handler Fullscreen
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => {
@@ -136,13 +135,12 @@ export default function App() {
     }
   };
 
-  // Helper untuk Modal
   const showModal = (type, title, message, onConfirm = null) => {
     setModal({ isOpen: true, type, title, message, onConfirm });
   };
   const closeModal = () => setModal({ isOpen: false, type: '', title: '', message: '', onConfirm: null });
 
-  // Handler Login
+  // --- PROSES LOGIN PEMILIH & ADMIN ---
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!isDbReady) return;
@@ -150,21 +148,30 @@ export default function App() {
     const formattedName = inputName.trim().toUpperCase();
     const formattedId = inputId.trim();
 
+    // Jalur Khusus Panitia (Login ke Dashboard Rekap)
+    if (formattedName === "PANITIA" && formattedId === "REKAP2026") {
+      setAppState('admin');
+      setInputName('');
+      setInputId('');
+      fetchRekapData(); 
+      return;
+    }
+
     setIsLoading(true);
 
-    // 1. Validasi Data dengan Database Pemilih (Dummy)
+    // Validasi dengan data pemilih
     const validVoter = DATA_PEMILIH_SAH.find(
       (v) => v.id === formattedId && v.name === formattedName
     );
 
     if (!validVoter) {
       setIsLoading(false);
-      showModal('error', 'Login Gagal', 'Nama dan NISN/NIP/NIGTT tidak sesuai atau tidak terdaftar.');
+      showModal('error', 'Login Gagal', 'Nama dan NISN/NIP tidak sesuai atau tidak terdaftar.');
       return;
     }
 
     try {
-      // 2. Cek apakah sudah pernah memilih di Firestore
+      // Cek apakah pemilih sudah pernah memberikan suara
       const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', formattedId);
       const statusSnap = await getDoc(statusRef);
 
@@ -174,7 +181,6 @@ export default function App() {
         return;
       }
 
-      // 3. Login Berhasil, masuk ke halaman voting
       setCurrentVoter(validVoter);
       setAppState('voting');
       setInputName('');
@@ -187,7 +193,6 @@ export default function App() {
     }
   };
 
-  // Handler Pilih Paslon
   const handlePilih = (kandidat) => {
     showModal(
       'confirm', 
@@ -197,13 +202,13 @@ export default function App() {
     );
   };
 
-  // Submit Vote ke Firestore
+  // --- PROSES SIMPAN SUARA (VOTING) ---
   const submitVote = async (candidateId) => {
     closeModal();
     setIsLoading(true);
 
     try {
-      // 1. Tandai pemilih sudah memilih (berdasarkan ID asli untuk mencegah double vote)
+      // 1. Tandai pemilih telah memilih
       const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', currentVoter.id);
       await setDoc(statusRef, {
         hasVoted: true,
@@ -211,18 +216,16 @@ export default function App() {
         timestamp: new Date().toISOString()
       });
 
-      // 2. Masukkan suara secara anonim (hanya mencatat ID kandidat yang dipilih)
-      // Menggunakan collection 'votes' agar identitas pemilih terpisah dari pilihannya
+      // 2. Simpan suara secara anonim
       const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
       await addDoc(votesColRef, {
         candidateId: candidateId,
         timestamp: new Date().toISOString()
       });
 
-      // 3. Selesai
       setAppState('success');
       
-      // Auto logout kembali ke depan setelah 4 detik
+      // 3. Otomatis kembali ke halaman awal setelah 4 detik
       setTimeout(() => {
         setAppState('login');
         setCurrentVoter(null);
@@ -236,8 +239,33 @@ export default function App() {
     }
   };
 
+  // --- PROSES REKAPITULASI (KHUSUS ADMIN) ---
+  const fetchRekapData = async () => {
+    setIsLoadingRekap(true);
+    try {
+      const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
+      const querySnapshot = await getDocs(votesColRef);
+      
+      let total = 0;
+      let hitungan = { 1: 0, 2: 0, 3: 0 }; 
 
-  // --- KOMPONEN UI ---
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        total++;
+        if (hitungan[data.candidateId] !== undefined) {
+          hitungan[data.candidateId]++;
+        }
+      });
+
+      setRekapData({ totalSuara: total, perKandidat: hitungan });
+    } catch (error) {
+      console.error("Gagal memuat rekap:", error);
+      showModal('error', 'Gagal Memuat Data', 'Pastikan koneksi internet stabil.');
+    } finally {
+      setIsLoadingRekap(false);
+    }
+  };
+
 
   const LogoSman = () => (
     <svg className="w-20 h-20 mx-auto mb-4" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -253,7 +281,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-200 flex flex-col">
-      {/* Header Universal */}
+      {/* --- HEADER --- */}
       <header className="bg-blue-900 text-white p-4 shadow-md flex justify-between items-center z-10">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center p-1">
@@ -282,7 +310,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className="flex-1 flex flex-col items-center justify-center p-4">
         
         {/* ================= HALAMAN LOGIN ================= */}
@@ -411,9 +438,69 @@ export default function App() {
           </div>
         )}
 
+        {/* ================= HALAMAN ADMIN / REKAP ================= */}
+        {appState === 'admin' && (
+          <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in duration-300 p-8">
+            <div className="flex justify-between items-center mb-8 border-b pb-4">
+              <div className="flex items-center gap-3 text-blue-900">
+                <BarChart3 size={32} />
+                <h2 className="text-2xl font-extrabold uppercase">Rekapitulasi Suara Real-time</h2>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={fetchRekapData}
+                  disabled={isLoadingRekap}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 font-bold rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw size={18} className={isLoadingRekap ? "animate-spin" : ""} />
+                  {isLoadingRekap ? "Memuat..." : "Refresh Data"}
+                </button>
+                <button 
+                  onClick={() => setAppState('login')}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  <ArrowLeft size={18} />
+                  Kembali
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-8 text-center">
+              <p className="text-blue-800 font-semibold mb-2">Total Suara Masuk Saat Ini</p>
+              <h3 className="text-5xl font-black text-blue-600">{rekapData.totalSuara} <span className="text-xl font-medium text-blue-400">Pemilih</span></h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {KANDIDAT.map((kandidat) => {
+                const perolehan = rekapData.perKandidat[kandidat.id] || 0;
+                const persentase = rekapData.totalSuara > 0 
+                  ? ((perolehan / rekapData.totalSuara) * 100).toFixed(1) 
+                  : 0;
+
+                return (
+                  <div key={kandidat.id} className="bg-slate-50 rounded-xl border border-slate-200 p-6 flex flex-col items-center text-center">
+                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-2xl font-black mb-4">
+                      {kandidat.id}
+                    </div>
+                    <h4 className="font-bold text-slate-800 h-12">{kandidat.nama}</h4>
+                    <div className="w-full h-2 bg-slate-200 rounded-full my-4 overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-1000 ease-out" 
+                        style={{ width: `${persentase}%` }}
+                      ></div>
+                    </div>
+                    <div className="text-3xl font-black text-slate-700">{perolehan}</div>
+                    <div className="text-sm font-semibold text-slate-500 mt-1">{persentase}% Suara</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </main>
 
-      {/* --- CUSTOM MODAL (Pengganti Alert) --- */}
+      {/* --- CUSTOM MODAL (PENGGANTI ALERT) --- */}
       {modal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
