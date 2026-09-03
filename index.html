@@ -1,0 +1,471 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  addDoc 
+} from 'firebase/firestore';
+import { Maximize, AlertCircle, CheckCircle2, User, KeyRound, LogOut } from 'lucide-react';
+
+// --- KONFIGURASI FIREBASE (Wajib untuk Canvas Environment) ---
+const defaultFirebaseConfig = {
+  apiKey: "AIzaSyCzeg9t7CjeoxNB9DaNK10NsHixk0LC9UA",
+  authDomain: "e-voting-6f923.firebaseapp.com",
+  projectId: "e-voting-6f923",
+  storageBucket: "e-voting-6f923.firebasestorage.app",
+  messagingSenderId: "626153070106",
+  appId: "1:626153070106:web:309766b2c60f3a01a9fba3"
+};
+
+let firebaseConfig = defaultFirebaseConfig;
+try {
+  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    const parsed = JSON.parse(__firebase_config);
+    if (Object.keys(parsed).length > 0) firebaseConfig = parsed;
+  }
+} catch (e) {
+  console.warn("Menggunakan konfigurasi default.");
+}
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'osis-sman1ngawi-app';
+
+// --- DATA DUMMY PEMILIH (Di dunia nyata, ini diambil dari server/excel) ---
+// Format: ID (NISN/NIP), Nama, Peran
+const DATA_PEMILIH_SAH = [
+  { id: "1234567890", name: "BUDI SANTOSO", role: "Siswa" },
+  { id: "0987654321", name: "SITI AMINAH", role: "Siswa" },
+  { id: "198001012005011001", name: "PAK GURU, S.Pd", role: "Guru" },
+  { id: "1122334455", name: "ANDI SETIAWAN", role: "Siswa" }
+];
+
+// --- DATA KANDIDAT PASLON ---
+const KANDIDAT = [
+  {
+    id: 1,
+    nama: "Raden Mas & Ayu Larasati",
+    visi: "Mewujudkan OSIS yang Inovatif dan Berkarakter",
+    img: "https://images.unsplash.com/photo-1529390079861-591de354faf5?auto=format&fit=crop&q=80&w=400&h=500" // Placeholder
+  },
+  {
+    id: 2,
+    nama: "Bagas Putra & Citra Kirana",
+    visi: "Sekolah Sehat, Siswa Berprestasi",
+    img: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=400&h=500" // Placeholder
+  },
+  {
+    id: 3,
+    nama: "Dimas Anggara & Eka Putri",
+    visi: "Sinergi, Kolaborasi, dan Aksi Nyata",
+    img: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=400&h=500" // Placeholder
+  }
+];
+
+export default function App() {
+  // State Autentikasi Firebase
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [isDbReady, setIsDbReady] = useState(false);
+
+  // State Aplikasi
+  const [appState, setAppState] = useState('login'); // 'login' | 'voting' | 'success'
+  const [currentVoter, setCurrentVoter] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // State Form Login
+  const [inputName, setInputName] = useState('');
+  const [inputId, setInputId] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // State Modal (Pengganti Alert)
+  const [modal, setModal] = useState({ isOpen: false, type: '', title: '', message: '', onConfirm: null });
+
+  // Inisialisasi Firebase Auth
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          try {
+            // Coba login menggunakan token keamanan sistem
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } catch (tokenError) {
+            console.warn("Token tidak cocok, mengalihkan ke login anonim:", tokenError.message);
+            // FALLBACK: Jika token gagal/mismatch, gunakan login anonim
+            await signInAnonymously(auth);
+          }
+        } else {
+          // Jika token sistem tidak ada, gunakan login anonim
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Firebase Auth Error:", error);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      if (user) setIsDbReady(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Handler Fullscreen
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  // Helper untuk Modal
+  const showModal = (type, title, message, onConfirm = null) => {
+    setModal({ isOpen: true, type, title, message, onConfirm });
+  };
+  const closeModal = () => setModal({ isOpen: false, type: '', title: '', message: '', onConfirm: null });
+
+  // Handler Login
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!isDbReady) return;
+
+    const formattedName = inputName.trim().toUpperCase();
+    const formattedId = inputId.trim();
+
+    setIsLoading(true);
+
+    // 1. Validasi Data dengan Database Pemilih (Dummy)
+    const validVoter = DATA_PEMILIH_SAH.find(
+      (v) => v.id === formattedId && v.name === formattedName
+    );
+
+    if (!validVoter) {
+      setIsLoading(false);
+      showModal('error', 'Login Gagal', 'Nama dan NISN/NIP/NIGTT tidak sesuai atau tidak terdaftar.');
+      return;
+    }
+
+    try {
+      // 2. Cek apakah sudah pernah memilih di Firestore
+      const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', formattedId);
+      const statusSnap = await getDoc(statusRef);
+
+      if (statusSnap.exists() && statusSnap.data().hasVoted) {
+        setIsLoading(false);
+        showModal('warning', 'Akses Ditolak', 'Maaf, pengguna ini sudah selesai menyalurkan suaranya. Tidak dapat memilih dua kali.');
+        return;
+      }
+
+      // 3. Login Berhasil, masuk ke halaman voting
+      setCurrentVoter(validVoter);
+      setAppState('voting');
+      setInputName('');
+      setInputId('');
+    } catch (error) {
+      console.error("Error checking vote status:", error);
+      showModal('error', 'Kesalahan Sistem', 'Terjadi kesalahan saat memeriksa data. Panggil panitia.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handler Pilih Paslon
+  const handlePilih = (kandidat) => {
+    showModal(
+      'confirm', 
+      'Konfirmasi Pilihan', 
+      `Apakah Anda yakin ingin memilih Paslon Nomor Urut ${kandidat.id} (${kandidat.nama})? Pilihan tidak dapat diubah setelah ini.`,
+      () => submitVote(kandidat.id)
+    );
+  };
+
+  // Submit Vote ke Firestore
+  const submitVote = async (candidateId) => {
+    closeModal();
+    setIsLoading(true);
+
+    try {
+      // 1. Tandai pemilih sudah memilih (berdasarkan ID asli untuk mencegah double vote)
+      const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', currentVoter.id);
+      await setDoc(statusRef, {
+        hasVoted: true,
+        role: currentVoter.role,
+        timestamp: new Date().toISOString()
+      });
+
+      // 2. Masukkan suara secara anonim (hanya mencatat ID kandidat yang dipilih)
+      // Menggunakan collection 'votes' agar identitas pemilih terpisah dari pilihannya
+      const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
+      await addDoc(votesColRef, {
+        candidateId: candidateId,
+        timestamp: new Date().toISOString()
+      });
+
+      // 3. Selesai
+      setAppState('success');
+      
+      // Auto logout kembali ke depan setelah 4 detik
+      setTimeout(() => {
+        setAppState('login');
+        setCurrentVoter(null);
+      }, 4000);
+
+    } catch (error) {
+      console.error("Error saving vote:", error);
+      showModal('error', 'Gagal Menyimpan', 'Terjadi kesalahan saat menyimpan suara Anda. Silakan lapor panitia.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  // --- KOMPONEN UI ---
+
+  const LogoSman = () => (
+    <svg className="w-20 h-20 mx-auto mb-4" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="48" fill="white" stroke="#1e3a8a" strokeWidth="4"/>
+      <path d="M50 15 L80 40 L80 80 L20 80 L20 40 Z" fill="#3b82f6" stroke="#1e3a8a" strokeWidth="2"/>
+      <path d="M50 30 L65 50 L35 50 Z" fill="white"/>
+      <text x="50" y="70" fontFamily="Arial" fontSize="12" fontWeight="bold" fill="white" textAnchor="middle">SMAN 1</text>
+      <text x="50" y="82" fontFamily="Arial" fontSize="10" fontWeight="bold" fill="white" textAnchor="middle">NGAWI</text>
+    </svg>
+  );
+
+  const isFormValid = inputName.trim().length > 0 && inputId.trim().length > 0;
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-200 flex flex-col">
+      {/* Header Universal */}
+      <header className="bg-blue-900 text-white p-4 shadow-md flex justify-between items-center z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center p-1">
+            <LogoSman />
+          </div>
+          <div>
+            <h1 className="font-bold text-lg leading-tight uppercase tracking-wide">E-Voting OSIS</h1>
+            <p className="text-xs text-blue-200">SMAN 1 NGAWI</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          {currentVoter && (
+             <div className="hidden sm:flex items-center gap-2 bg-blue-800 px-3 py-1.5 rounded-lg border border-blue-700">
+               <User size={16} />
+               <span className="text-sm font-medium">{currentVoter.name}</span>
+             </div>
+          )}
+          <button 
+            onClick={toggleFullscreen}
+            className="p-2 bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors border border-blue-700 tooltip"
+            title="Toggle Fullscreen (Khusus Panitia)"
+          >
+            <Maximize size={18} />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col items-center justify-center p-4">
+        
+        {/* ================= HALAMAN LOGIN ================= */}
+        {appState === 'login' && (
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in duration-300">
+            <div className="p-8 text-center bg-gradient-to-b from-blue-50 to-white">
+              <LogoSman />
+              <h2 className="text-2xl font-extrabold text-slate-800 mb-1">PEMILIHAN KETUA OSIS</h2>
+              <p className="text-slate-500 text-sm font-medium">MASA BAKTI 2026/2027</p>
+            </div>
+            
+            <form onSubmit={handleLogin} className="p-8 pt-2">
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Nama Lengkap Sesuai Data</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <User className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={inputName}
+                      onChange={(e) => setInputName(e.target.value.toUpperCase())}
+                      className="pl-10 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all uppercase placeholder:normal-case font-medium"
+                      placeholder="Masukkan nama lengkap..."
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">NISN (Siswa) / NIP (Guru)</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <KeyRound className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <input 
+                      type="text" 
+                      value={inputId}
+                      onChange={(e) => setInputId(e.target.value)}
+                      className="pl-10 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium tracking-wide"
+                      placeholder="Masukkan nomor identitas..."
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8">
+                <button 
+                  type="submit" 
+                  disabled={!isFormValid || isLoading || !isDbReady}
+                  className={`w-full py-3.5 px-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2
+                    ${isFormValid && !isLoading ? 'bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/30 transform hover:-translate-y-0.5' : 'bg-slate-300 cursor-not-allowed shadow-none'}`}
+                >
+                  {isLoading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    "MASUK KE BILIK SUARA"
+                  )}
+                </button>
+              </div>
+            </form>
+            
+            <div className="bg-slate-50 p-4 text-center border-t border-slate-100">
+              <p className="text-xs text-slate-500">
+                Gunakan perangkat ini secara bertanggung jawab.<br/>Setiap identitas hanya dapat digunakan satu kali.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ================= HALAMAN VOTING ================= */}
+        {appState === 'voting' && (
+          <div className="w-full max-w-6xl animate-in fade-in slide-in-from-bottom-8 duration-500">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-extrabold text-slate-800 uppercase tracking-tight">Kandidat Ketua & Wakil Ketua OSIS</h2>
+              <p className="text-lg text-slate-600 mt-2">Klik pada foto atau nama paslon untuk memberikan suara Anda.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {KANDIDAT.map((kandidat) => (
+                <div 
+                  key={kandidat.id}
+                  onClick={() => handlePilih(kandidat)}
+                  className="bg-white rounded-3xl overflow-hidden shadow-lg border-2 border-transparent hover:border-blue-500 hover:shadow-2xl transition-all cursor-pointer group transform hover:-translate-y-2"
+                >
+                  <div className="relative h-80 bg-slate-200 overflow-hidden">
+                    <img 
+                      src={kandidat.img} 
+                      alt={`Paslon ${kandidat.id}`} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 grayscale hover:grayscale-0"
+                    />
+                    <div className="absolute top-4 left-4 bg-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black shadow-lg border-4 border-white">
+                      {kandidat.id}
+                    </div>
+                  </div>
+                  <div className="p-6 text-center">
+                    <h3 className="text-xl font-bold text-slate-800 mb-2 leading-tight group-hover:text-blue-600 transition-colors">{kandidat.nama}</h3>
+                    <p className="text-sm text-slate-500 italic">"{kandidat.visi}"</p>
+                    
+                    <button className="mt-6 w-full py-3 bg-slate-100 text-slate-700 font-bold rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                      PILIH PASLON {kandidat.id}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ================= HALAMAN SUKSES ================= */}
+        {appState === 'success' && (
+          <div className="text-center animate-in zoom-in duration-500 flex flex-col items-center">
+            <div className="w-32 h-32 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
+              <CheckCircle2 size={80} />
+            </div>
+            <h2 className="text-4xl font-extrabold text-slate-800 mb-4">Terima Kasih!</h2>
+            <p className="text-xl text-slate-600 max-w-lg mb-8">
+              Suara Anda telah berhasil direkam dalam sistem. Partisipasi Anda menentukan masa depan SMAN 1 Ngawi.
+            </p>
+            <div className="flex items-center gap-2 text-slate-400">
+              <LogOut size={16} />
+              <p className="text-sm font-medium">Sistem akan otomatis keluar dalam beberapa detik...</p>
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* --- CUSTOM MODAL (Pengganti Alert) --- */}
+      {modal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className={`p-6 border-b ${
+              modal.type === 'error' ? 'bg-red-50 border-red-100' : 
+              modal.type === 'warning' ? 'bg-orange-50 border-orange-100' : 
+              'bg-blue-50 border-blue-100'
+            }`}>
+              <div className="flex items-center gap-3">
+                {modal.type === 'error' && <AlertCircle className="text-red-500 w-8 h-8" />}
+                {modal.type === 'warning' && <AlertCircle className="text-orange-500 w-8 h-8" />}
+                {modal.type === 'confirm' && <CheckCircle2 className="text-blue-500 w-8 h-8" />}
+                <h3 className={`text-lg font-bold ${
+                  modal.type === 'error' ? 'text-red-700' : 
+                  modal.type === 'warning' ? 'text-orange-700' : 
+                  'text-blue-700'
+                }`}>{modal.title}</h3>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-slate-600 text-[15px] leading-relaxed">{modal.message}</p>
+            </div>
+            
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              {modal.type === 'confirm' ? (
+                <>
+                  <button 
+                    onClick={closeModal}
+                    className="px-5 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-200 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button 
+                    onClick={modal.onConfirm}
+                    className="px-5 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md transition-colors"
+                  >
+                    Ya, Yakin
+                  </button>
+                </>
+              ) : (
+                <button 
+                  onClick={closeModal}
+                  className="px-5 py-2.5 rounded-xl font-bold text-white bg-slate-800 hover:bg-slate-900 shadow-md transition-colors w-full"
+                >
+                  Mengerti
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
