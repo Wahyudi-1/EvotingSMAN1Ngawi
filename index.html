@@ -76,9 +76,6 @@
                 <i class="ph ph-user text-lg"></i>
                 <span id="voter-name-display" class="text-sm font-medium">Pemilih</span>
             </div>
-            <button id="btn-fullscreen" class="p-2 bg-blue-800 hover:bg-blue-700 rounded-lg transition-colors border border-blue-700" title="Toggle Fullscreen">
-                <i class="ph ph-corners-out text-lg"></i>
-            </button>
         </div>
     </header>
 
@@ -271,7 +268,6 @@
             admin: document.getElementById('view-admin')
         };
         const dom = {
-            btnFullscreen: document.getElementById('btn-fullscreen'),
             voterBadge: document.getElementById('voter-badge'),
             voterNameDisplay: document.getElementById('voter-name-display'),
             formLogin: document.getElementById('form-login'),
@@ -299,15 +295,6 @@
         // Memaksa fullscreen pada setiap aktivitas klik, sentuh, atau ketik
         ['click', 'touchstart', 'keydown'].forEach(evt => {
             document.addEventListener(evt, enforceFullscreen, { passive: true });
-        });
-
-        // Tombol manual fullscreen
-        dom.btnFullscreen.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen();
-            } else {
-                if (document.exitFullscreen) document.exitFullscreen();
-            }
         });
 
         // --- SISTEM MODAL KUSTOM ---
