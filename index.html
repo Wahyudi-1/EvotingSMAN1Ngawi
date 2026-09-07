@@ -153,12 +153,12 @@
                     <i class="ph-fill ph-check-circle text-7xl"></i>
                 </div>
                 <h2 class="text-4xl font-extrabold text-slate-800 mb-4">Terima Kasih!</h2>
-                <p class="text-xl text-slate-600 mb-8">
-                    Suara Anda telah berhasil direkam dalam sistem. Partisipasi Anda menentukan masa depan SMAN 1 Ngawi.
+                <p class="text-xl text-slate-600 mb-4">
+                    Suara Anda telah berhasil direkam. Partisipasi Anda menentukan masa depan SMAN 1 Ngawi.
                 </p>
-                <div class="flex items-center gap-2 text-slate-400 justify-center">
-                    <i class="ph ph-sign-out text-lg"></i>
-                    <p class="text-sm font-medium">Sistem otomatis keluar dalam <span id="countdown">4</span> detik...</p>
+                <div class="flex items-center gap-2 text-slate-400 justify-center mt-2 bg-slate-100 px-4 py-2 rounded-full">
+                    <i class="ph ph-sign-out text-lg animate-pulse"></i>
+                    <p class="text-sm font-bold">Sistem otomatis kembali ke awal...</p>
                 </div>
             </div>
         </section>
@@ -223,7 +223,7 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, addDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Konfigurasi Default Firebase
+        // Konfigurasi Default Firebase (PERBAIKAN BUG)
         const defaultFirebaseConfig = {
           apiKey: "AIzaSyCzeg9t7CjeoxNB9DaNK10NsHixk0LC9UA",
           authDomain: "e-voting-6f923.firebaseapp.com",
@@ -249,7 +249,7 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         
-        // Identitas App (Path Firebase Firestore MENDATAR)
+        // Identitas App (Path Firebase Firestore)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'osis-sman1ngawi-app';
 
         // --- DATA KANDIDAT ---
@@ -260,7 +260,6 @@
         ];
 
         // State Aplikasi
-        let currentUser = null;
         let currentVoterData = null;
         let isDbReady = false;
 
@@ -285,6 +284,31 @@
             btnRefreshAdmin: document.getElementById('btn-refresh-admin'),
             btnBackAdmin: document.getElementById('btn-back-admin')
         };
+
+        // --- STREAMING_CHUNK:Menambahkan fungsi Navigasi & Layar Penuh (Kiosk Mode)... ---
+        // --- AUTO FULLSCREEN (KIOSK MODE) ---
+        function enforceFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    // Abaikan error jika terpicu sebelum gesture valid
+                    // console.log(`Menunggu interaksi user untuk fullscreen`);
+                });
+            }
+        }
+        
+        // Memaksa fullscreen pada setiap aktivitas klik, sentuh, atau ketik
+        ['click', 'touchstart', 'keydown'].forEach(evt => {
+            document.addEventListener(evt, enforceFullscreen, { passive: true });
+        });
+
+        // Tombol manual fullscreen
+        dom.btnFullscreen.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        });
 
         // --- SISTEM MODAL KUSTOM ---
         const modal = {
@@ -347,7 +371,6 @@
             hideModal();
         });
 
-        // --- NAVIGASI ANTAR HALAMAN ---
         function switchView(viewName) {
             Object.values(views).forEach(v => v.classList.remove('active'));
             views[viewName].classList.add('active');
@@ -362,19 +385,8 @@
             }
         }
 
-        // --- FULLSCREEN ---
-        dom.btnFullscreen.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
-                });
-            } else {
-                if (document.exitFullscreen) document.exitFullscreen();
-            }
-        });
-
-        // --- INIT FIREBASE AUTH ---
-        // CRITICAL: Harus authentikasi sebelum query Firestore apa pun
+        // --- STREAMING_CHUNK:Autentikasi Firebase dan Proses Login... ---
+        // INIT FIREBASE AUTH
         async function initAuth() {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -393,7 +405,6 @@
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                currentUser = user;
                 isDbReady = true;
                 dom.btnLogin.disabled = false;
             }
@@ -412,6 +423,7 @@
             }
         }
 
+        // PROSES LOGIN
         dom.formLogin.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!isDbReady) {
@@ -433,12 +445,11 @@
             setLoginLoading(true);
 
             try {
-                // 1. Cek apakah NISN terdaftar di 'voters_list' (Public Data)
+                // 1. Cek apakah NISN terdaftar di 'voters_list' (Database Firestore)
                 const pemilihRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_list', inputIdVal);
                 let pemilihSnap = await getDoc(pemilihRef);
 
-                // --- FALLBACK UNTUK TESTING PREVIEW ---
-                // Jika database kosong, kita ijinkan user dummy BUDI SANTOSO untuk demonstrasi.
+                // Fallback untuk percobaan di Preview Canvas
                 if (!pemilihSnap.exists()) {
                     if (inputIdVal === "1234567890" && inputNameVal === "BUDI SANTOSO") {
                          await setDoc(pemilihRef, { name: "BUDI SANTOSO", role: "Siswa" });
@@ -452,14 +463,14 @@
 
                 const dataPemilih = pemilihSnap.data();
 
-                // Validasi Nama
+                // 2. Validasi Nama
                 if (dataPemilih.name !== inputNameVal) {
                     setLoginLoading(false);
                     showModal('error', 'Data Tidak Cocok', `Nama yang dimasukkan tidak sesuai dengan database untuk NISN ${inputIdVal}.`);
                     return;
                 }
 
-                // 2. Cek apakah sudah pernah memilih di 'voters_status'
+                // 3. Cek apakah sudah pernah memilih
                 const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', inputIdVal);
                 const statusSnap = await getDoc(statusRef);
 
@@ -469,15 +480,13 @@
                     return;
                 }
 
-                // 3. Login sukses, set identitas pemilih
+                // 4. Login sukses
                 currentVoterData = {
                     id: inputIdVal,
                     name: dataPemilih.name,
                     role: dataPemilih.role || 'Siswa'
                 };
 
-                dom.inputName.value = '';
-                dom.inputId.value = '';
                 switchView('voting');
 
             } catch (error) {
@@ -488,6 +497,7 @@
             }
         });
 
+        // --- STREAMING_CHUNK:Menyiapkan Kartu Kandidat dan Alur Voting... ---
         function renderCandidates() {
             dom.candidatesContainer.innerHTML = '';
             KANDIDAT.forEach(kandidat => {
@@ -510,7 +520,6 @@
                     </div>
                 `;
 
-                // Event listener konfirmasi
                 card.addEventListener('click', () => {
                     showModal('confirm', 'Konfirmasi Pilihan', 
                         `Apakah Anda yakin ingin memberikan suara untuk Paslon Nomor Urut ${kandidat.id} (${kandidat.nama})? Pilihan Anda tidak dapat dibatalkan.`, 
@@ -524,10 +533,9 @@
 
         async function submitVote(candidateId) {
             try {
-                // Tampilkan loading global
                 document.body.style.cursor = 'wait';
                 
-                // 1. Tandai user telah memilih
+                // 1. Catat identitas telah memilih (pengunci)
                 const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', currentVoterData.id);
                 await setDoc(statusRef, {
                     hasVoted: true,
@@ -535,30 +543,23 @@
                     timestamp: new Date().toISOString()
                 });
 
-                // 2. Simpan Suara Anonim ke collection 'votes'
+                // 2. Simpan Suara secara anonim
                 const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
                 await addDoc(votesColRef, {
                     candidateId: candidateId,
                     timestamp: new Date().toISOString()
                 });
 
-                // 3. Pindah ke Halaman Sukses
+                // 3. Tampilkan Sukses
                 switchView('success');
                 
-                // Hitung mundur dan logout
-                let counter = 4;
-                const counterSpan = document.getElementById('countdown');
-                counterSpan.textContent = counter;
-                
-                const interval = setInterval(() => {
-                    counter--;
-                    counterSpan.textContent = counter;
-                    if(counter <= 0) {
-                        clearInterval(interval);
-                        currentVoterData = null;
-                        switchView('login');
-                    }
-                }, 1000);
+                // --- LOGOUT KILAT (1,5 Detik) ---
+                setTimeout(() => {
+                    currentVoterData = null; // Hapus data sesi pemilih
+                    dom.inputName.value = ''; // Kosongkan form
+                    dom.inputId.value = '';
+                    switchView('login'); // Kembali ke form awal
+                }, 1500);
 
             } catch (error) {
                 console.error("Voting error: ", error);
@@ -568,6 +569,7 @@
             }
         }
 
+        // --- STREAMING_CHUNK:Logika Dashboard Admin Rekapitulasi... ---
         async function loadAdminData() {
             const icon = document.getElementById('icon-refresh');
             const text = document.getElementById('text-refresh');
@@ -577,7 +579,6 @@
             dom.btnRefreshAdmin.disabled = true;
 
             try {
-                // Ambil semua data suara
                 const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
                 const querySnapshot = await getDocs(votesColRef);
                 
@@ -592,7 +593,6 @@
                     }
                 });
 
-                // Update UI Admin
                 document.getElementById('admin-total-votes').textContent = totalVotes;
                 const container = document.getElementById('admin-stats-container');
                 container.innerHTML = '';
@@ -629,9 +629,7 @@
         dom.btnRefreshAdmin.addEventListener('click', loadAdminData);
         dom.btnBackAdmin.addEventListener('click', () => switchView('login'));
 
-        // Render inisial kandidat
         renderCandidates();
-
     </script>
 </body>
 </html>
