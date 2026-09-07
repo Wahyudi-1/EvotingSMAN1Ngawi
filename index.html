@@ -434,18 +434,10 @@
             const inputNameVal = dom.inputName.value.trim().toUpperCase();
             const inputIdVal = dom.inputId.value.trim();
 
-            if (inputNameVal === "PANITIA" && inputIdVal === "REKAP2026") {
-                dom.inputName.value = '';
-                dom.inputId.value = '';
-                switchView('admin');
-                loadAdminData();
-                return;
-            }
-
             setLoginLoading(true);
 
             try {
-                // 1. Cek apakah NISN terdaftar di 'voters_list' (Database Firestore)
+                // 1. Cek apakah NISN terdaftar di 'voters_list' (Public Data)
                 const pemilihRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_list', inputIdVal);
                 let pemilihSnap = await getDoc(pemilihRef);
 
@@ -463,14 +455,24 @@
 
                 const dataPemilih = pemilihSnap.data();
 
-                // 2. Validasi Nama
+                // Validasi Nama
                 if (dataPemilih.name !== inputNameVal) {
                     setLoginLoading(false);
                     showModal('error', 'Data Tidak Cocok', `Nama yang dimasukkan tidak sesuai dengan database untuk NISN ${inputIdVal}.`);
                     return;
                 }
 
-                // 3. Cek apakah sudah pernah memilih
+                // --- SISTEM KEAMANAN BARU: CEK AKSES PANITIA DARI DATABASE ---
+                if (dataPemilih.role === "Panitia" || dataPemilih.role === "Admin") {
+                    setLoginLoading(false);
+                    dom.inputName.value = '';
+                    dom.inputId.value = '';
+                    switchView('admin');
+                    loadAdminData();
+                    return;
+                }
+
+                // 2. Cek apakah sudah pernah memilih di 'voters_status'
                 const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', inputIdVal);
                 const statusSnap = await getDoc(statusRef);
 
