@@ -90,31 +90,24 @@
             </div>
             
             <form id="form-login" class="p-8 pt-2">
-                <div class="space-y-5">
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Nama Lengkap Sesuai Data</label>
-                        <div class="relative">
-                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <i class="ph ph-user text-slate-400 text-xl"></i>
-                            </div>
-                            <input type="text" id="input-name" class="pl-10 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all uppercase placeholder:normal-case font-medium" placeholder="Masukkan nama lengkap..." required autocomplete="off">
-                        </div>
-                    </div>
-
+                <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-2">NISN (Siswa) / NIP (Guru)</label>
                         <div class="relative">
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <i class="ph ph-key text-slate-400 text-xl"></i>
                             </div>
-                            <input type="text" id="input-id" class="pl-10 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-medium tracking-wide" placeholder="Masukkan nomor identitas..." required autocomplete="off">
+                            <input type="text" id="input-id" class="pl-10 w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-bold text-lg tracking-wide text-center" placeholder="Ketik NISN..." required autocomplete="off">
                         </div>
                     </div>
                 </div>
 
-                <div class="mt-8">
-                    <button type="submit" id="btn-submit-login" class="w-full py-3.5 px-4 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center justify-center gap-2 transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span id="login-text">MASUK KE BILIK SUARA</span>
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                    <button type="button" id="btn-scan-qr" class="w-full py-3.5 px-4 rounded-xl font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 transition-all flex items-center justify-center gap-2 border border-blue-200">
+                        <i class="ph-bold ph-qr-code text-xl"></i> SCAN QR
+                    </button>
+                    <button type="submit" id="btn-submit-login" class="w-full py-3.5 px-4 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span id="login-text">MASUK</span>
                         <div id="login-spinner" class="loader hidden"></div>
                     </button>
                 </div>
@@ -122,10 +115,31 @@
             
             <div class="bg-slate-50 p-4 text-center border-t border-slate-100">
                 <p class="text-xs text-slate-500">
-                    Gunakan perangkat ini secara bertanggung jawab.<br>Setiap identitas hanya dapat digunakan satu kali.
+                    Arahkan kartu QR ke kamera atau ketikkan NISN secara manual.
                 </p>
             </div>
         </section>
+
+        <!-- MODAL SCANNER QR -->
+        <div id="qr-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm hidden">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden zoom-in">
+                <div class="p-4 border-b bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                        <i class="ph-bold ph-camera"></i> Scan Kartu Pemilih
+                    </h3>
+                    <button id="btn-close-qr" class="p-2 bg-slate-200 hover:bg-slate-300 rounded-lg text-slate-600 transition-colors">
+                        <i class="ph-bold ph-x"></i>
+                    </button>
+                </div>
+                <div class="p-4 bg-black relative">
+                    <!-- Area Kamera QR Code -->
+                    <div id="reader" class="w-full rounded-lg overflow-hidden bg-black min-h-[300px]"></div>
+                </div>
+                <div class="p-4 bg-slate-50 text-center text-xs text-slate-500">
+                    Posisikan QR Code di dalam kotak kamera. Sistem akan otomatis memindai.
+                </div>
+            </div>
+        </div>
 
         <section id="view-voting" class="view-section w-full max-w-6xl slide-up">
             <div class="text-center mb-8">
@@ -208,6 +222,9 @@
         </div>
     </div>
 
+    <!-- Tambahan Script HTML5-QRCode via CDN -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
     <script type="module">
         // Import Firebase Modular SDK dari CDN
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -245,9 +262,9 @@
 
         // --- DATA KANDIDAT ---
         const KANDIDAT = [
-            { id: 1, nama: "Raden Mas & Ayu Larasati", visi: "Mewujudkan OSIS yang Inovatif dan Berkarakter", img: "https://images.unsplash.com/photo-1529390079861-591de354faf5?auto=format&fit=crop&q=80&w=400&h=500" },
-            { id: 2, nama: "Bagas Putra & Citra Kirana", visi: "Sekolah Sehat, Siswa Berprestasi", img: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=400&h=500" },
-            { id: 3, nama: "Dimas Anggara & Eka Putri", visi: "Sinergi, Kolaborasi, dan Aksi Nyata", img: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=400&h=500" }
+            { id: 1, nama: "Raden Mas & Ayu Larasati", visi: "Mewujudkan OSIS yang Inovatif dan Berkarakter", img: "https://raw.githubusercontent.com/Wahyudi-1/EvotingSMAN1Ngawi/main/paslon1.png" },
+            { id: 2, nama: "Bagas Putra & Citra Kirana", visi: "Sekolah Sehat, Siswa Berprestasi", img: "https://raw.githubusercontent.com/Wahyudi-1/EvotingSMAN1Ngawi/main/paslon2.png" },
+            { id: 3, nama: "Dimas Anggara & Eka Putri", visi: "Sinergi, Kolaborasi, dan Aksi Nyata", img: "https://raw.githubusercontent.com/Wahyudi-1/EvotingSMAN1Ngawi/main/paslon3.png" }
         ];
 
         // State Aplikasi
@@ -265,31 +282,17 @@
             voterBadge: document.getElementById('voter-badge'),
             voterNameDisplay: document.getElementById('voter-name-display'),
             formLogin: document.getElementById('form-login'),
-            inputName: document.getElementById('input-name'),
             inputId: document.getElementById('input-id'),
             btnLogin: document.getElementById('btn-submit-login'),
             loginText: document.getElementById('login-text'),
             loginSpinner: document.getElementById('login-spinner'),
+            btnScanQR: document.getElementById('btn-scan-qr'),
+            btnCloseQR: document.getElementById('btn-close-qr'),
+            qrModal: document.getElementById('qr-modal'),
             candidatesContainer: document.getElementById('candidates-container'),
             btnRefreshAdmin: document.getElementById('btn-refresh-admin'),
             btnBackAdmin: document.getElementById('btn-back-admin')
         };
-
-        // --- STREAMING_CHUNK:Menambahkan fungsi Navigasi & Layar Penuh (Kiosk Mode)... ---
-        // --- AUTO FULLSCREEN (KIOSK MODE) ---
-        function enforceFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    // Abaikan error jika terpicu sebelum gesture valid
-                    // console.log(`Menunggu interaksi user untuk fullscreen`);
-                });
-            }
-        }
-        
-        // Memaksa fullscreen pada setiap aktivitas klik, sentuh, atau ketik
-        ['click', 'touchstart', 'keydown'].forEach(evt => {
-            document.addEventListener(evt, enforceFullscreen, { passive: true });
-        });
 
         // --- SISTEM MODAL KUSTOM ---
         const modal = {
@@ -395,6 +398,9 @@
 
         function setLoginLoading(isLoading) {
             dom.btnLogin.disabled = isLoading;
+            dom.btnScanQR.disabled = isLoading;
+            dom.inputId.disabled = isLoading;
+            
             if (isLoading) {
                 dom.loginText.classList.add('hidden');
                 dom.loginSpinner.classList.remove('hidden');
@@ -404,7 +410,55 @@
             }
         }
 
-        // PROSES LOGIN
+        // --- SISTEM SCANNER QR CODE ---
+        let html5QrcodeScanner = null;
+
+        function startQRScanner() {
+            dom.qrModal.classList.remove('hidden');
+            
+            // Inisialisasi scanner jika belum ada
+            if (!html5QrcodeScanner) {
+                html5QrcodeScanner = new Html5Qrcode("reader");
+            }
+            
+            // Konfigurasi kamera depan/belakang dan ukuran kotak pemindai
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            html5QrcodeScanner.start(
+                { facingMode: "environment" }, // Prioritas kamera belakang jika ada
+                config,
+                (decodedText) => {
+                    // JIKA BERHASIL TER-SCAN:
+                    // 1. Matikan kamera
+                    stopQRScanner();
+                    
+                    // 2. Isi kotak input dengan hasil scan
+                    dom.inputId.value = decodedText.trim();
+                    
+                    // 3. Otomatis tekan tombol "MASUK"
+                    dom.btnLogin.click();
+                },
+                (errorMessage) => {
+                    // Abaikan error saat proses memindai (karena terus berjalan mencari QR)
+                }
+            ).catch(err => {
+                console.error("Gagal memulai kamera:", err);
+                alert("Tidak dapat mengakses kamera. Pastikan Anda telah memberikan izin kamera di browser.");
+                stopQRScanner();
+            });
+        }
+
+        function stopQRScanner() {
+            dom.qrModal.classList.add('hidden');
+            if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
+                html5QrcodeScanner.stop().catch(err => console.error("Gagal mematikan kamera", err));
+            }
+        }
+
+        dom.btnScanQR.addEventListener('click', startQRScanner);
+        dom.btnCloseQR.addEventListener('click', stopQRScanner);
+
+        // --- PROSES LOGIN (HANYA CEK NISN) ---
         dom.formLogin.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!isDbReady) {
@@ -412,41 +466,27 @@
                 return;
             }
 
-            const inputNameVal = dom.inputName.value.trim().toUpperCase();
             const inputIdVal = dom.inputId.value.trim();
 
             setLoginLoading(true);
 
             try {
-                // 1. Cek apakah NISN terdaftar di 'voters_list' (Public Data)
+                // 1. Cek Data Pemilih di Firebase
                 const pemilihRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_list', inputIdVal);
                 let pemilihSnap = await getDoc(pemilihRef);
 
-                // Fallback untuk percobaan di Preview Canvas
+                // Jika NISN tidak ditemukan
                 if (!pemilihSnap.exists()) {
-                    if (inputIdVal === "1234567890" && inputNameVal === "BUDI SANTOSO") {
-                         await setDoc(pemilihRef, { name: "BUDI SANTOSO", role: "Siswa" });
-                         pemilihSnap = await getDoc(pemilihRef);
-                    } else {
-                        setLoginLoading(false);
-                        showModal('error', 'Akses Ditolak', 'NISN / NIP Anda tidak terdaftar di dalam sistem.');
-                        return;
-                    }
+                    setLoginLoading(false);
+                    showModal('error', 'Akses Ditolak', `NISN/NIP (${inputIdVal}) tidak terdaftar di dalam sistem.`);
+                    return;
                 }
 
                 const dataPemilih = pemilihSnap.data();
 
-                // Validasi Nama
-                if (dataPemilih.name !== inputNameVal) {
-                    setLoginLoading(false);
-                    showModal('error', 'Data Tidak Cocok', `Nama yang dimasukkan tidak sesuai dengan database untuk NISN ${inputIdVal}.`);
-                    return;
-                }
-
-                // --- SISTEM KEAMANAN BARU: CEK AKSES PANITIA DARI DATABASE ---
+                // --- SISTEM KEAMANAN PANITIA ---
                 if (dataPemilih.role === "Panitia" || dataPemilih.role === "Admin") {
                     setLoginLoading(false);
-                    dom.inputName.value = '';
                     dom.inputId.value = '';
                     switchView('admin');
                     loadAdminData();
@@ -459,18 +499,28 @@
 
                 if (statusSnap.exists() && statusSnap.data().hasVoted) {
                     setLoginLoading(false);
-                    showModal('warning', 'Telah Memilih', 'Maaf, hak suara Anda telah digunakan sebelumnya. Anda tidak dapat memilih dua kali.');
+                    showModal('warning', 'Telah Memilih', `Atas nama ${dataPemilih.name} telah menggunakan hak suaranya. Tidak dapat memilih dua kali.`);
                     return;
                 }
 
-                // 4. Login sukses
+                // 3. Login sukses
+                // Sistem otomatis mengambil nama dari database!
                 currentVoterData = {
                     id: inputIdVal,
-                    name: dataPemilih.name,
+                    name: dataPemilih.name, // Nama otomatis ditarik untuk ditampilkan di pojok kanan atas
                     role: dataPemilih.role || 'Siswa'
                 };
 
-                switchView('voting');
+                // Tampilkan konfirmasi singkat sapaan nama agar siswa yakin itu adalah datanya
+                const sapaan = currentVoterData.role === 'Guru' ? 'Bpk/Ibu' : 'Kak';
+                
+                dom.inputId.value = '';
+                
+                // Animasi sejenak untuk memunculkan bilik suara
+                setTimeout(() => {
+                    switchView('voting');
+                    showModal('confirm', 'Verifikasi Data', `Selamat datang, ${sapaan} ${currentVoterData.name}. Silakan gunakan hak suara Anda dengan bijak.`);
+                }, 300);
 
             } catch (error) {
                 console.error(error);
