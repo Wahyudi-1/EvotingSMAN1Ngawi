@@ -222,6 +222,16 @@
         </div>
     </div>
 
+    <!-- KIOSK OVERLAY (LAYAR PENUH PAKSA) -->
+    <div id="kiosk-overlay" class="fixed inset-0 z-[100] bg-slate-900 flex flex-col items-center justify-center text-white hidden">
+        <i class="ph-fill ph-warning-octagon text-7xl text-red-500 mb-6 animate-pulse"></i>
+        <h2 class="text-3xl font-extrabold mb-2 text-center">MODE BILIK SUARA TERKUNCI</h2>
+        <p class="text-lg text-slate-300 mb-8 text-center px-4">Aplikasi ini harus dijalankan dalam layar penuh demi keamanan.<br>Silakan klik tombol di bawah untuk kembali ke bilik suara.</p>
+        <button id="btn-resume-kiosk" class="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all flex items-center gap-3 text-lg">
+            <i class="ph-bold ph-corners-out text-2xl"></i> Kembali ke Layar Penuh
+        </button>
+    </div>
+
     <!-- Tambahan Script HTML5-QRCode via CDN -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
@@ -293,6 +303,42 @@
             btnRefreshAdmin: document.getElementById('btn-refresh-admin'),
             btnBackAdmin: document.getElementById('btn-back-admin')
         };
+
+        // --- AUTO FULLSCREEN (STRICT KIOSK MODE) ---
+        let hasStartedKiosk = false;
+        const kioskOverlay = document.getElementById('kiosk-overlay');
+        const btnResumeKiosk = document.getElementById('btn-resume-kiosk');
+
+        function enforceFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().then(() => {
+                    hasStartedKiosk = true;
+                    kioskOverlay.classList.add('hidden');
+                }).catch(err => {
+                    // Abaikan error sebelum ada interaksi klik dari user
+                });
+            }
+        }
+        
+        // Memaksa fullscreen pada setiap aktivitas klik, sentuh, atau ketik
+        ['click', 'touchstart', 'keydown'].forEach(evt => {
+            document.addEventListener(evt, enforceFullscreen, { passive: true });
+        });
+
+        // Deteksi jika pengguna sengaja/tidak sengaja menekan tombol ESC
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && hasStartedKiosk) {
+                // Jika keluar dari layar penuh, tampilkan layar pemblokir hitam
+                kioskOverlay.classList.remove('hidden');
+            } else if (document.fullscreenElement) {
+                // Jika sudah full screen, sembunyikan layar hitam
+                kioskOverlay.classList.add('hidden');
+                hasStartedKiosk = true;
+            }
+        });
+
+        // Event listener khusus untuk tombol kembalikan layar penuh
+        btnResumeKiosk.addEventListener('click', enforceFullscreen);
 
         // --- SISTEM MODAL KUSTOM ---
         const modal = {
