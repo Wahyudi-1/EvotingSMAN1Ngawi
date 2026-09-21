@@ -205,7 +205,7 @@
             </div>
             
             <div class="p-6">
-                <p id="modal-message" class="text-slate-600 text-[15px] leading-relaxed">Pesan modal</p>
+                <p id="modal-message" class="text-slate-600 text-[15px] leading-relaxed whitespace-pre-line">Pesan modal</p>
             </div>
             
             <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3" id="modal-actions">
@@ -307,8 +307,9 @@
         };
 
         let confirmCallback = null;
+        let cancelCallback = null;
 
-        function showModal(type, title, message, onConfirm = null) {
+        function showModal(type, title, message, onConfirm = null, onCancel = null) {
             modal.title.textContent = title;
             modal.message.textContent = message;
             
@@ -338,6 +339,7 @@
                 modal.btnCancel.classList.remove('hidden');
                 modal.btnConfirm.classList.remove('hidden');
                 confirmCallback = onConfirm;
+                cancelCallback = onCancel;
             }
 
             modal.container.classList.remove('hidden');
@@ -346,10 +348,14 @@
         function hideModal() {
             modal.container.classList.add('hidden');
             confirmCallback = null;
+            cancelCallback = null;
         }
 
         modal.btnOk.addEventListener('click', hideModal);
-        modal.btnCancel.addEventListener('click', hideModal);
+        modal.btnCancel.addEventListener('click', () => {
+            if (cancelCallback) cancelCallback();
+            hideModal();
+        });
         modal.btnConfirm.addEventListener('click', () => {
             if (confirmCallback) confirmCallback();
             hideModal();
@@ -503,24 +509,26 @@
                     return;
                 }
 
-                // 3. Login sukses
-                // Sistem otomatis mengambil nama dari database!
-                currentVoterData = {
-                    id: inputIdVal,
-                    name: dataPemilih.name, // Nama otomatis ditarik untuk ditampilkan di pojok kanan atas
-                    role: dataPemilih.role || 'Siswa'
-                };
-
-                // Tampilkan konfirmasi singkat sapaan nama agar siswa yakin itu adalah datanya
-                const sapaan = currentVoterData.role === 'Guru' ? 'Bpk/Ibu' : 'Kak';
+                // 3. Konfirmasi Identitas Pemilih (SEBELUM MASUK BILIK)
+                const sapaan = dataPemilih.role === 'Guru' ? 'Bpk/Ibu' : 'Kak';
                 
-                dom.inputId.value = '';
-                
-                // Animasi sejenak untuk memunculkan bilik suara
-                setTimeout(() => {
-                    switchView('voting');
-                    showModal('confirm', 'Verifikasi Data', `Selamat datang, ${sapaan} ${currentVoterData.name}. Silakan gunakan hak suara Anda dengan bijak.`);
-                }, 300);
+                showModal('confirm', 'Verifikasi Identitas', 
+                    `Apakah data berikut ini benar?\n\nNama: ${dataPemilih.name}\nNISN/NIP: ${inputIdVal}\n\nJika benar, klik "Ya, Yakin" untuk masuk ke bilik suara.`,
+                    () => {
+                        // JIKA DIKONFIRMASI
+                        currentVoterData = {
+                            id: inputIdVal,
+                            name: dataPemilih.name,
+                            role: dataPemilih.role || 'Siswa'
+                        };
+                        dom.inputId.value = '';
+                        switchView('voting');
+                    },
+                    () => {
+                        // JIKA DIBATALKAN (Kembali ke form)
+                        dom.inputId.value = '';
+                    }
+                );
 
             } catch (error) {
                 console.error(error);
@@ -589,7 +597,6 @@
                 // --- LOGOUT KILAT (1,5 Detik) ---
                 setTimeout(() => {
                     currentVoterData = null; // Hapus data sesi pemilih
-                    dom.inputName.value = ''; // Kosongkan form
                     dom.inputId.value = '';
                     switchView('login'); // Kembali ke form awal
                 }, 1500);
