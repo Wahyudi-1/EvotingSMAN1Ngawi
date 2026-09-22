@@ -141,6 +141,7 @@
             </div>
         </div>
 
+        <!-- VIEW: VOTING KANDIDAT -->
         <section id="view-voting" class="view-section w-full max-w-6xl slide-up">
             <div class="text-center mb-8">
                 <h2 class="text-3xl font-extrabold text-slate-800 uppercase tracking-tight">Kandidat Ketua & Wakil Ketua OSIS</h2>
@@ -152,6 +153,7 @@
             </div>
         </section>
 
+        <!-- VIEW: SUCCESS -->
         <section id="view-success" class="view-section text-center zoom-in w-full max-w-md mx-auto">
             <div class="flex flex-col items-center">
                 <div class="w-32 h-32 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
@@ -165,34 +167,6 @@
                     <i class="ph ph-sign-out text-lg animate-pulse"></i>
                     <p class="text-sm font-bold">Sistem otomatis kembali ke awal...</p>
                 </div>
-            </div>
-        </section>
-
-        <section id="view-admin" class="view-section w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 p-8 zoom-in mx-auto">
-            <div class="flex justify-between items-center mb-8 border-b pb-4 flex-wrap gap-4">
-                <div class="flex items-center gap-3 text-blue-900">
-                    <i class="ph-fill ph-chart-bar text-4xl"></i>
-                    <h2 class="text-2xl font-extrabold uppercase">Rekapitulasi Real-time</h2>
-                </div>
-                <div class="flex gap-3">
-                    <button id="btn-refresh-admin" class="flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 font-bold rounded-lg hover:bg-blue-200 transition-colors">
-                        <i class="ph ph-arrows-clockwise text-lg" id="icon-refresh"></i>
-                        <span id="text-refresh">Refresh Data</span>
-                    </button>
-                    <button id="btn-back-admin" class="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-lg hover:bg-slate-200 transition-colors">
-                        <i class="ph ph-arrow-left text-lg"></i>
-                        Kembali
-                    </button>
-                </div>
-            </div>
-
-            <div class="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-8 text-center">
-                <p class="text-blue-800 font-semibold mb-2">Total Suara Masuk Saat Ini</p>
-                <h3 class="text-5xl font-black text-blue-600"><span id="admin-total-votes">0</span> <span class="text-xl font-medium text-blue-400">Pemilih</span></h3>
-            </div>
-
-            <div id="admin-stats-container" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Statistik dirender oleh JavaScript -->
             </div>
         </section>
     </main>
@@ -236,12 +210,11 @@
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <script type="module">
-        // Import Firebase Modular SDK dari CDN
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, addDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Konfigurasi Default Firebase (PERBAIKAN BUG)
+        // Konfigurasi Default Firebase
         const defaultFirebaseConfig = {
           apiKey: "AIzaSyCzeg9t7CjeoxNB9DaNK10NsHixk0LC9UA",
           authDomain: "e-voting-6f923.firebaseapp.com",
@@ -252,7 +225,6 @@
           measurementId: "G-ERXK45EJPE"
         };
 
-        // Inject Konfigurasi Lingkungan (Jika ada)
         let firebaseConfig = defaultFirebaseConfig;
         try {
             if (typeof __firebase_config !== 'undefined' && __firebase_config) {
@@ -267,7 +239,6 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         
-        // Identitas App (Path Firebase Firestore)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'osis-sman1ngawi-app';
 
         // --- DATA KANDIDAT ---
@@ -277,16 +248,13 @@
             { id: 3, nama: "Bunga Asshyfa Huwaida & Habel Gibbor Christiano", visi: "Mewujudkan OSIS yang berintegritas dalam menjalankan setiap program kerja, sinergis dalam membangun kolaborasi, serta berorientasi pada perubahan nyata bagi seluruh siswa, dengan berlandaskan nilai-nilai Pancasila", img: "https://raw.githubusercontent.com/Wahyudi-1/EvotingSMAN1Ngawi/main/paslon3.jpg" }
         ];
 
-        // State Aplikasi
         let currentVoterData = null;
         let isDbReady = false;
 
-        // Referensi DOM
         const views = {
             login: document.getElementById('view-login'),
             voting: document.getElementById('view-voting'),
-            success: document.getElementById('view-success'),
-            admin: document.getElementById('view-admin')
+            success: document.getElementById('view-success')
         };
         const dom = {
             voterBadge: document.getElementById('voter-badge'),
@@ -299,9 +267,7 @@
             btnScanQR: document.getElementById('btn-scan-qr'),
             btnCloseQR: document.getElementById('btn-close-qr'),
             qrModal: document.getElementById('qr-modal'),
-            candidatesContainer: document.getElementById('candidates-container'),
-            btnRefreshAdmin: document.getElementById('btn-refresh-admin'),
-            btnBackAdmin: document.getElementById('btn-back-admin')
+            candidatesContainer: document.getElementById('candidates-container')
         };
 
         // --- AUTO FULLSCREEN (STRICT KIOSK MODE) ---
@@ -314,30 +280,23 @@
                 document.documentElement.requestFullscreen().then(() => {
                     hasStartedKiosk = true;
                     kioskOverlay.classList.add('hidden');
-                }).catch(err => {
-                    // Abaikan error sebelum ada interaksi klik dari user
-                });
+                }).catch(err => {});
             }
         }
         
-        // Memaksa fullscreen pada setiap aktivitas klik, sentuh, atau ketik
         ['click', 'touchstart', 'keydown'].forEach(evt => {
             document.addEventListener(evt, enforceFullscreen, { passive: true });
         });
 
-        // Deteksi jika pengguna sengaja/tidak sengaja menekan tombol ESC
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && hasStartedKiosk) {
-                // Jika keluar dari layar penuh, tampilkan layar pemblokir hitam
                 kioskOverlay.classList.remove('hidden');
             } else if (document.fullscreenElement) {
-                // Jika sudah full screen, sembunyikan layar hitam
                 kioskOverlay.classList.add('hidden');
                 hasStartedKiosk = true;
             }
         });
 
-        // Event listener khusus untuk tombol kembalikan layar penuh
         btnResumeKiosk.addEventListener('click', enforceFullscreen);
 
         // --- SISTEM MODAL KUSTOM ---
@@ -359,7 +318,6 @@
             modal.title.textContent = title;
             modal.message.textContent = message;
             
-            // Reset state
             modal.header.className = 'p-6 border-b flex items-center gap-3';
             modal.icon.className = 'text-3xl';
             modal.btnCancel.classList.add('hidden');
@@ -421,8 +379,6 @@
             }
         }
 
-        // --- STREAMING_CHUNK:Autentikasi Firebase dan Proses Login... ---
-        // INIT FIREBASE AUTH
         async function initAuth() {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -468,31 +424,21 @@
         function startQRScanner() {
             dom.qrModal.classList.remove('hidden');
             
-            // Inisialisasi scanner jika belum ada
             if (!html5QrcodeScanner) {
                 html5QrcodeScanner = new Html5Qrcode("reader");
             }
             
-            // Konfigurasi kamera depan/belakang dan ukuran kotak pemindai
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
             html5QrcodeScanner.start(
-                { facingMode: "environment" }, // Prioritas kamera belakang jika ada
+                { facingMode: "environment" }, 
                 config,
                 (decodedText) => {
-                    // JIKA BERHASIL TER-SCAN:
-                    // 1. Matikan kamera
                     stopQRScanner();
-                    
-                    // 2. Isi kotak input dengan hasil scan
                     dom.inputId.value = decodedText.trim();
-                    
-                    // 3. Otomatis tekan tombol "MASUK"
                     dom.btnLogin.click();
                 },
-                (errorMessage) => {
-                    // Abaikan error saat proses memindai (karena terus berjalan mencari QR)
-                }
+                (errorMessage) => {}
             ).catch(err => {
                 console.error("Gagal memulai kamera:", err);
                 alert("Tidak dapat mengakses kamera. Pastikan Anda telah memberikan izin kamera di browser.");
@@ -510,7 +456,7 @@
         dom.btnScanQR.addEventListener('click', startQRScanner);
         dom.btnCloseQR.addEventListener('click', stopQRScanner);
 
-        // --- PROSES LOGIN (HANYA CEK NISN) ---
+        // --- PROSES LOGIN ---
         dom.formLogin.addEventListener('submit', async (e) => {
             e.preventDefault();
             if (!isDbReady) {
@@ -519,15 +465,13 @@
             }
 
             const inputIdVal = dom.inputId.value.trim();
-
             setLoginLoading(true);
 
             try {
-                // 1. Cek Data Pemilih di Firebase
+                // 1. Cek Data Pemilih
                 const pemilihRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_list', inputIdVal);
                 let pemilihSnap = await getDoc(pemilihRef);
 
-                // Jika NISN tidak ditemukan
                 if (!pemilihSnap.exists()) {
                     setLoginLoading(false);
                     showModal('error', 'Akses Ditolak', `NISN/NIP (${inputIdVal}) tidak terdaftar di dalam sistem.`);
@@ -536,16 +480,15 @@
 
                 const dataPemilih = pemilihSnap.data();
 
-                // --- SISTEM KEAMANAN PANITIA ---
+                // --- SISTEM KEAMANAN PANITIA (Fitur Admin Dipindahkan) ---
                 if (dataPemilih.role === "Panitia" || dataPemilih.role === "Admin") {
                     setLoginLoading(false);
                     dom.inputId.value = '';
-                    switchView('admin');
-                    loadAdminData();
+                    showModal('warning', 'Akses Dialihkan', 'Fitur rekapitulasi hasil suara untuk Panitia/Admin telah dipindahkan ke website terpisah. Halaman ini khusus untuk Bilik Suara saja.');
                     return;
                 }
 
-                // 2. Cek apakah sudah pernah memilih di 'voters_status'
+                // 2. Cek apakah sudah pernah memilih
                 const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', inputIdVal);
                 const statusSnap = await getDoc(statusRef);
 
@@ -555,13 +498,10 @@
                     return;
                 }
 
-                // 3. Konfirmasi Identitas Pemilih (SEBELUM MASUK BILIK)
-                const sapaan = dataPemilih.role === 'Guru' ? 'Bpk/Ibu' : 'Kak';
-                
+                // 3. Konfirmasi Identitas
                 showModal('confirm', 'Verifikasi Identitas', 
                     `Apakah data berikut ini benar?\n\nNama: ${dataPemilih.name}\nNISN/NIP: ${inputIdVal}\n\nJika benar, klik "Ya, Yakin" untuk masuk ke bilik suara.`,
                     () => {
-                        // JIKA DIKONFIRMASI
                         currentVoterData = {
                             id: inputIdVal,
                             name: dataPemilih.name,
@@ -570,10 +510,7 @@
                         dom.inputId.value = '';
                         switchView('voting');
                     },
-                    () => {
-                        // JIKA DIBATALKAN (Kembali ke form)
-                        dom.inputId.value = '';
-                    }
+                    () => { dom.inputId.value = ''; }
                 );
 
             } catch (error) {
@@ -584,7 +521,6 @@
             }
         });
 
-        // --- STREAMING_CHUNK:Menyiapkan Kartu Kandidat dan Alur Voting... ---
         function renderCandidates() {
             dom.candidatesContainer.innerHTML = '';
             KANDIDAT.forEach(kandidat => {
@@ -622,7 +558,7 @@
             try {
                 document.body.style.cursor = 'wait';
                 
-                // 1. Catat identitas telah memilih (pengunci)
+                // 1. Kunci status pemilih
                 const statusRef = doc(db, 'artifacts', appId, 'public', 'data', 'voters_status', currentVoterData.id);
                 await setDoc(statusRef, {
                     hasVoted: true,
@@ -630,21 +566,21 @@
                     timestamp: new Date().toISOString()
                 });
 
-                // 2. Simpan Suara secara anonim
+                // 2. Simpan suara anonim
                 const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
                 await addDoc(votesColRef, {
                     candidateId: candidateId,
                     timestamp: new Date().toISOString()
                 });
 
-                // 3. Tampilkan Sukses
+                // 3. Tampilkan sukses
                 switchView('success');
                 
-                // --- LOGOUT KILAT (1,5 Detik) ---
+                // 4. Auto kembali ke login
                 setTimeout(() => {
-                    currentVoterData = null; // Hapus data sesi pemilih
+                    currentVoterData = null;
                     dom.inputId.value = '';
-                    switchView('login'); // Kembali ke form awal
+                    switchView('login');
                 }, 1500);
 
             } catch (error) {
@@ -654,66 +590,6 @@
                 document.body.style.cursor = 'default';
             }
         }
-
-        // --- STREAMING_CHUNK:Logika Dashboard Admin Rekapitulasi... ---
-        async function loadAdminData() {
-            const icon = document.getElementById('icon-refresh');
-            const text = document.getElementById('text-refresh');
-            
-            icon.classList.add('animate-spin');
-            text.textContent = 'Memuat...';
-            dom.btnRefreshAdmin.disabled = true;
-
-            try {
-                const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
-                const querySnapshot = await getDocs(votesColRef);
-                
-                let totalVotes = 0;
-                let tally = { 1: 0, 2: 0, 3: 0 };
-                
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    totalVotes++;
-                    if(tally[data.candidateId] !== undefined) {
-                        tally[data.candidateId]++;
-                    }
-                });
-
-                document.getElementById('admin-total-votes').textContent = totalVotes;
-                const container = document.getElementById('admin-stats-container');
-                container.innerHTML = '';
-
-                KANDIDAT.forEach(kandidat => {
-                    const perolehan = tally[kandidat.id] || 0;
-                    const persentase = totalVotes > 0 ? ((perolehan / totalVotes) * 100).toFixed(1) : 0;
-                    
-                    container.innerHTML += `
-                        <div class="bg-slate-50 rounded-xl border border-slate-200 p-6 flex flex-col items-center text-center">
-                            <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-2xl font-black mb-4">
-                                ${kandidat.id}
-                            </div>
-                            <h4 class="font-bold text-slate-800 h-12">${kandidat.nama}</h4>
-                            <div class="w-full h-3 bg-slate-200 rounded-full my-4 overflow-hidden shadow-inner">
-                                <div class="h-full bg-blue-500 transition-all duration-1000 ease-out" style="width: ${persentase}%"></div>
-                            </div>
-                            <div class="text-4xl font-black text-slate-700">${perolehan}</div>
-                            <div class="text-sm font-semibold text-slate-500 mt-1">${persentase}% Suara</div>
-                        </div>
-                    `;
-                });
-
-            } catch (error) {
-                console.error("Admin error:", error);
-                showModal('error', 'Gagal Memuat Data', 'Pastikan Anda terkoneksi internet untuk menarik data terbaru.');
-            } finally {
-                icon.classList.remove('animate-spin');
-                text.textContent = 'Refresh Data';
-                dom.btnRefreshAdmin.disabled = false;
-            }
-        }
-
-        dom.btnRefreshAdmin.addEventListener('click', loadAdminData);
-        dom.btnBackAdmin.addEventListener('click', () => switchView('login'));
 
         renderCandidates();
     </script>
