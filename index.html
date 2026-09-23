@@ -499,13 +499,15 @@
                 }
 
                 // 3. Konfirmasi Identitas
+                // Modifikasi: Menambahkan informasi Kelas pada modal verifikasi dan menyimpannya di currentVoterData
                 showModal('confirm', 'Verifikasi Identitas', 
-                    `Apakah data berikut ini benar?\n\nNama: ${dataPemilih.name}\nNISN/NIP: ${inputIdVal}\n\nJika benar, klik "Ya, Yakin" untuk masuk ke bilik suara.`,
+                    `Apakah data berikut ini benar?\n\nNama: ${dataPemilih.name}\nNISN/NIP: ${inputIdVal}\nKelas: ${dataPemilih.kelas || '-'}\n\nJika benar, klik "Ya, Yakin" untuk masuk ke bilik suara.`,
                     () => {
                         currentVoterData = {
                             id: inputIdVal,
                             name: dataPemilih.name,
-                            role: dataPemilih.role || 'Siswa'
+                            role: dataPemilih.role || 'Siswa',
+                            kelas: dataPemilih.kelas || '-' // Menyimpan data kelas dari database
                         };
                         dom.inputId.value = '';
                         switchView('voting');
@@ -563,13 +565,15 @@
                 await setDoc(statusRef, {
                     hasVoted: true,
                     role: currentVoterData.role,
+                    kelas: currentVoterData.kelas, // Modifikasi: Menambahkan kelas saat menyimpan status pemilih
                     timestamp: new Date().toISOString()
                 });
 
-                // 2. Simpan suara anonim
+                // 2. Simpan suara anonim beserta data kelas pemilih
                 const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
                 await addDoc(votesColRef, {
                     candidateId: candidateId,
+                    kelas: currentVoterData.kelas, // Modifikasi: Menambahkan kelas bersama ID Kandidat
                     timestamp: new Date().toISOString()
                 });
 
